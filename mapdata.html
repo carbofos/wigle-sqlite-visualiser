@@ -1,0 +1,186 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiFi Network Visualizer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <style>
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1000;
+            text-align: center;
+        }
+        .progress {
+            width: 300px;
+            height: 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-bar {
+            height: 100%;
+            background: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .stats {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="loading" id="loading">
+        <h3>Loading WiFi Networks...</h3>
+        <div class="progress">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div id="progress-text">0 / 0 networks loaded</div>
+    </div>
+    <div class="stats" id="stats">
+        <div>Total: <span id="total-count">0</span></div>
+        <div>Visible: <span id="visible-count">0</span></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script>
+        // Global variables
+        var map = null;
+        var allData = [];
+        var visibleMarkers = [];
+        var markerCache = new Map();
+        var isDataLoaded = false;
+        
+        // Initialize map
+        function initMap() {
+            map = L.map('map').setView([41.87996942192917, 12.40041386381927], 17);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            
+            // Add event listeners for map movement
+            map.on('moveend', updateVisibleMarkers);
+            map.on('zoomend', updateVisibleMarkers);
+        }
+        
+        // Create marker with caching
+        function createMarker(network) {
+            const key = `${network.lat},${network.lon},${network.mac}`;
+            
+            if (markerCache.has(key)) {
+                return markerCache.get(key);
+            }
+            
+            const popupContent = `
+                <div style="font-family: Arial, sans-serif; font-size: 12px;">
+                    <strong>SSID:</strong> ${network.ssid}<br>
+                    <strong>BSSID:</strong> ${network.mac}<br>
+                    <strong>RSSI:</strong> ${network.rssi} dBm<br>
+                    <strong>Channel:</strong> ${network.channel}<br>
+                    <strong>Auth:</strong> ${network.auth}
+                </div>
+            `;
+            
+            const marker = L.marker([network.lat, network.lon], {
+                icon: L.divIcon({
+                    className: 'custom-div-icon',
+                    html: '<i class="fa fa-wifi" style="color: red; font-size: 16px;"></i>',
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                })
+            })
+            .bindTooltip(network.ssid)
+            .bindPopup(popupContent);
+            
+            markerCache.set(key, marker);
+            return marker;
+        }
+        
+        // Update visible markers based on current map bounds
+        function updateVisibleMarkers() {
+            if (!isDataLoaded || !map) return;
+            
+            const bounds = map.getBounds();
+            const newVisibleMarkers = [];
+            
+            // Find markers within current bounds
+            for (const network of allData) {
+                if (bounds.contains([network.lat, network.lon])) {
+                    newVisibleMarkers.push(network);
+                }
+            }
+            
+            // Remove markers that are no longer visible
+            for (const marker of visibleMarkers) {
+                if (marker && marker.remove) {
+                    marker.remove();
+                }
+            }
+            
+            // Add new visible markers
+            visibleMarkers = [];
+            for (const network of newVisibleMarkers) {
+                const marker = createMarker(network);
+                marker.addTo(map);
+                visibleMarkers.push(marker);
+            }
+            
+            // Update stats
+            document.getElementById('total-count').textContent = allData.length;
+            document.getElementById('visible-count').textContent = visibleMarkers.length;
+        }
+        
+        // Load data asynchronously
+        function loadData() {
+            fetch('wifi_data.json')
+                .then(response => response.json())
+                .then(data => {
+                    allData = data;
+                    isDataLoaded = true;
+                    
+                    document.getElementById('total-count').textContent = data.length;
+                    document.getElementById('progress-text').textContent = `${data.length} networks loaded`;
+                    document.getElementById('progress-bar').style.width = '100%';
+                    
+                    // Hide loading screen
+                    setTimeout(() => {
+                        document.getElementById('loading').style.display = 'none';
+                    }, 1000);
+                    
+                    // Show initial markers
+                    updateVisibleMarkers();
+                })
+                .catch(error => {
+                    console.error('Error loading data:', error);
+                    document.getElementById('loading').innerHTML = '<h3>Error loading data</h3><p>Please check the console for details.</p>';
+                });
+        }
+        
+        // Initialize everything
+        initMap();
+        loadData();
+    </script>
+</body>
+</html>
