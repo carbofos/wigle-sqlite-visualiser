@@ -7,11 +7,14 @@ Wigle Android application allows to export your local database to sqlite format.
 
 
 ## How To Use
+1. Export sqlite to HTML and JSON files
 ```bash
-pip install -r requirements.txt
 python wiggle-sqlite-map.py
-./run-server-with-browser.py
+```
 
+2. Run HTTP server to open mapdata.html and visualise wifi_data.json
+```bash
+./run-server-with-browser.py
 ```
 
 ## Samples
